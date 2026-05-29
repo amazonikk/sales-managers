@@ -1,19 +1,29 @@
 // =====================================================
+// MONTH TABS
+// =====================================================
+// Формат вкладок у Google Sheets: "06/2026", "07/2026", "08/2026"
+// Тут задаємо діапазон місяців, які дашборд буде пробувати читати.
+//
+// Важливо:
+// якщо вкладка ще не створена в Google Sheets — код її просто пропустить.
+// Коли ти створиш нову вкладку, наприклад "08/2026", вона автоматично підтягнеться,
+// якщо цей місяць входить у діапазон нижче.
+const MONTH_TABS = generateMonthTabs("06/2026", "12/2026");
+
+// =====================================================
 // CONFIG
 // =====================================================
-// Якщо з'явиться новий місяць окремим листом, додай його сюди:
-// sheetTabs: ["062026", "072026", "082026"]
 const CONFIG = {
   managers: [
     {
       name: "Вова",
       sheetId: "18qXgAeBLSTCXON_dyRRPsffxJOrNadlaXYZlZq3RgXs",
-      sheetTabs: ["062026"]
+      sheetTabs: MONTH_TABS
     },
     {
       name: "Бек",
       sheetId: "1hBZD4O4eO95kauZA-dnWHDVAbEmuw3qToqdhgnYf2hk",
-      sheetTabs: ["062026"]
+      sheetTabs: MONTH_TABS
     }
   ],
 
@@ -44,6 +54,24 @@ const $ = (id) => document.getElementById(id);
 // =====================================================
 // HELPERS
 // =====================================================
+function generateMonthTabs(start, end) {
+  const [startMonth, startYear] = start.split("/").map(Number);
+  const [endMonth, endYear] = end.split("/").map(Number);
+
+  const result = [];
+  let current = new Date(startYear, startMonth - 1, 1);
+  const last = new Date(endYear, endMonth - 1, 1);
+
+  while (current <= last) {
+    const month = String(current.getMonth() + 1).padStart(2, "0");
+    const year = current.getFullYear();
+    result.push(`${month}/${year}`);
+    current.setMonth(current.getMonth() + 1);
+  }
+
+  return result;
+}
+
 function setStatus(text) {
   $("status").textContent = text;
 }
@@ -199,24 +227,36 @@ function sumRows(rows) {
 // GOOGLE SHEETS FETCH
 // =====================================================
 async function fetchSheet(manager, sheetName) {
-  const url = `https://docs.google.com/spreadsheets/d/${manager.sheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}`;
+  try {
+    const url = `https://docs.google.com/spreadsheets/d/${manager.sheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}`;
 
-  const response = await fetch(url);
-  const text = await response.text();
+    const response = await fetch(url);
+    const text = await response.text();
 
-  const jsonText = text
-    .replace(/^[\s\S]*?google\.visualization\.Query\.setResponse\(/, "")
-    .replace(/\);?\s*$/, "");
+    const jsonText = text
+      .replace(/^[\s\S]*?google\.visualization\.Query\.setResponse\(/, "")
+      .replace(/\);?\s*$/, "");
 
-  const data = JSON.parse(jsonText);
+    const data = JSON.parse(jsonText);
 
-  if (!data.table || !data.table.rows) {
-    throw new Error(`Не вдалося прочитати лист ${sheetName} для ${manager.name}`);
+    // Якщо вкладки немає або Google повернув помилку — просто пропускаємо цей місяць
+    if (data.status === "error") {
+      console.warn(`Пропущено: ${manager.name} / ${sheetName}`, data.errors);
+      return [];
+    }
+
+    if (!data.table || !data.table.rows) {
+      console.warn(`Порожня або недоступна вкладка: ${manager.name} / ${sheetName}`);
+      return [];
+    }
+
+    return data.table.rows
+      .map((r) => normalizeRow(manager.name, sheetName, r))
+      .filter(Boolean);
+  } catch (error) {
+    console.warn(`Не вдалося прочитати: ${manager.name} / ${sheetName}`, error);
+    return [];
   }
-
-  return data.table.rows
-    .map((r) => normalizeRow(manager.name, sheetName, r))
-    .filter(Boolean);
 }
 
 function normalizeRow(managerName, sheetName, googleRow) {
@@ -261,13 +301,16 @@ async function loadData() {
   rawRows = results.flat().sort((a, b) => a.date - b.date);
 
   if (!rawRows.length) {
-    throw new Error("Не знайдено жодного денного рядка з датою.");
+    throw new Error(
+      "Не знайдено жодного денного рядка з датою. Перевір назви вкладок, доступ до Google Sheets і формат дат у колонці A."
+    );
   }
 
   initFilters();
   applyFilters();
 
-  setStatus(`Оновлено: ${new Date().toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })}`);
+  const loadedTabs = [...new Set(rawRows.map((r) => r.sheet))].join(", ");
+  setStatus(`Оновлено: ${new Date().toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })} · Листи: ${loadedTabs}`);
 }
 
 // =====================================================
@@ -616,8 +659,9 @@ loadData().catch((error) => {
     "Не вдалося завантажити Google Sheets.\n\n" +
     "Перевір:\n" +
     "1. Таблиці доступні для перегляду за посиланням.\n" +
-    "2. Назва листа точно 062026.\n" +
-    "3. Дані починаються з тієї самої структури колонок.\n\n" +
+    "2. Назви вкладок у форматі 06/2026, 07/2026.\n" +
+    "3. Дати в колонці A мають бути реальними датами.\n" +
+    "4. Структура колонок не змінилася.\n\n" +
     error.message
   );
 });
