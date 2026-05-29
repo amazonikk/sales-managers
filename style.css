@@ -346,3 +346,50 @@ tbody tr:hover {
     white-space: normal;
   }
 }
+/* =====================================================
+   QUICK PERIOD BUTTONS
+   Add this block to the end of style.css
+===================================================== */
+
+.quick-range {
+  display: grid;
+  gap: 8px;
+  margin: 2px 0 14px;
+}
+
+.quick-range > span {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.quick-range-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.quick-btn {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--text);
+  border-radius: 14px;
+  padding: 11px 12px;
+  font-weight: 900;
+  font-size: 13px;
+  cursor: pointer;
+  transition: 0.15s ease;
+}
+
+.quick-btn:hover {
+  background: var(--brand-soft);
+  color: var(--brand);
+  border-color: rgba(123, 30, 43, 0.22);
+}
+
+.quick-btn.active {
+  background: var(--brand);
+  color: #fff;
+  border-color: var(--brand);
+}
