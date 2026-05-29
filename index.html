@@ -100,18 +100,6 @@
           <div id="kpiConversion" class="kpi-value">—</div>
           <div class="kpi-note">Продажі факт / Дзвінки</div>
         </article>
-
-        <article class="kpi-card">
-          <div class="kpi-label">План/факт дзвінки</div>
-          <div id="kpiCallsPlanFact" class="kpi-value">—</div>
-          <div id="kpiCallsPlanFactNote" class="kpi-note">План / факт</div>
-        </article>
-
-        <article class="kpi-card">
-          <div class="kpi-label">План/факт продажі</div>
-          <div id="kpiSalesPlanFact" class="kpi-value">—</div>
-          <div id="kpiSalesPlanFactNote" class="kpi-note">План / факт</div>
-        </article>
       </section>
 
       <section class="chart-grid">
@@ -129,7 +117,7 @@
           <div class="card-head">
             <div>
               <h2>Порівняння</h2>
-              <p>Менеджери за вибраний період.</p>
+              <p>Вова vs Бек за вибраний період.</p>
             </div>
           </div>
           <canvas id="managerChart"></canvas>
@@ -151,16 +139,12 @@
               <tr>
                 <th>Період</th>
                 <th>Менеджер</th>
-                <th>Дзвінки факт</th>
+                <th>Дзвінки</th>
                 <th>Дзвінки &gt;1 хв</th>
                 <th>Нові CRM</th>
                 <th>Домовленості</th>
                 <th>Продажі факт</th>
                 <th>Конверсія</th>
-                <th>План дзвінки</th>
-                <th>П/Ф дзвінки</th>
-                <th>План продажі</th>
-                <th>П/Ф продажі</th>
               </tr>
             </thead>
             <tbody id="dataTable"></tbody>
@@ -170,6 +154,6 @@
     </main>
   </div>
 
-  <script src="./app.js?v=40"></script>
+  <script src="./app.js"></script>
 </body>
 </html>
