@@ -24,6 +24,41 @@ const CONFIG = {
       name: "Бек",
       sheetId: "1hBZD4O4eO95kauZA-dnWHDVAbEmuw3qToqdhgnYf2hk",
       sheetTabs: MONTH_TABS
+    },
+    {
+      name: "Максим",
+      sheetId: "1VIrQHz4U3IhZ_FE_m9-jg8mZdrLukgtYgXwENGA66Bs",
+      sheetTabs: MONTH_TABS
+    },
+    {
+      name: "Руслан",
+      sheetId: "1xVil9pW_2406goqECY8vLKRN2Liu8UOfVhLEBmM4nYM",
+      sheetTabs: MONTH_TABS
+    },
+    {
+      name: "Саша",
+      sheetId: "1YUtZdwIAH8HZPO8K7Ocp1JPRaf0EGkcLe6WWZCU1Ovo",
+      sheetTabs: MONTH_TABS
+    },
+    {
+      name: "Sid",
+      sheetId: "1xr1P3NTY0hAxa9tB-Maen4unn_tkyZgCbi4vJJ16QXI",
+      sheetTabs: MONTH_TABS
+    },
+    {
+      name: "Oumaima",
+      sheetId: "1S8VYkGncjGSncHfpXb0OhA8qzBSn5oSWAQF-p-LLZ4c",
+      sheetTabs: MONTH_TABS
+    },
+    {
+      name: "M'hammed",
+      sheetId: "1NEViDBeyAeBi0o4Q513tqtPzar5jsx2q1CPCwPIctUM",
+      sheetTabs: MONTH_TABS
+    },
+    {
+      name: "Arda",
+      sheetId: "1b4M6sle0tHZq51QVvIPWaj-4bK_RaKc8MZsXKkpq_50",
+      sheetTabs: MONTH_TABS
     }
   ],
 
