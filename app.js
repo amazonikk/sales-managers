@@ -70,7 +70,7 @@ const CONFIG = {
     messagesNoCall: 5,// F — Кол-во сообщений людей без звонка
     newCrm: 6,        // G — Кол-во новых людей в срм
     nonTarget: 7,     // H — Кол-во нецелевых звонков/сообщений
-    salesPlan: 8,     // I
+    salesPlan: 8,     // I — Кол-во продаж план (Общее)
     salesAgreed: 9,   // J — Договоренность о приезде / оплате
     salesFact: 22     // W — Кол-во продаж факт Общее
   }
@@ -80,7 +80,9 @@ const CONFIG = {
 // STATE
 // =====================================================
 let rawRows = [];
+let planRows = [];
 let filteredRows = [];
+let filteredPlanRows = [];
 let timelineChart = null;
 let managerChart = null;
 
@@ -111,6 +113,11 @@ function setStatus(text) {
   $("status").textContent = text;
 }
 
+function cellText(cell) {
+  if (!cell) return "";
+  return String(cell.v ?? cell.f ?? "").trim();
+}
+
 function numberValue(cell) {
   if (!cell) return 0;
 
@@ -134,8 +141,10 @@ function parseGoogleDate(cell) {
   if (value instanceof Date) return value;
 
   if (typeof value === "string") {
+    const clean = value.trim();
+
     // Формат Google Visualization API: Date(2026,5,1)
-    const gviz = value.match(/^Date\((\d{4}),(\d{1,2}),(\d{1,2})\)$/);
+    const gviz = clean.match(/^Date\((\d{4}),(\d{1,2}),(\d{1,2})\)$/);
     if (gviz) {
       const year = Number(gviz[1]);
       const month = Number(gviz[2]); // 0-based
@@ -143,20 +152,47 @@ function parseGoogleDate(cell) {
       return new Date(year, month, day);
     }
 
-    // Формат 01.06.2026
-    const dot = value.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
-    if (dot) {
-      const day = Number(dot[1]);
-      const month = Number(dot[2]) - 1;
-      const year = Number(dot[3]);
+    // Формати 01.06.2026 / 01-06-2026 / 01/06/2026
+    const european = clean.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})$/);
+    if (european) {
+      const day = Number(european[1]);
+      const month = Number(european[2]) - 1;
+      const year = Number(european[3]);
       return new Date(year, month, day);
     }
 
-    // Якщо це тижневий рядок типу "01-05.06.2026 факт" — ігноруємо
+    // Якщо це тижневий рядок типу "01-05.06.2026 факт" — ігноруємо як денний рядок
     return null;
   }
 
   return null;
+}
+
+function parsePlanRange(cell) {
+  const text = cellText(cell).toLowerCase();
+
+  // Планові рядки мають виглядати приблизно так:
+  // 01-05.06.2026 план
+  // 08-12.06.2026 план
+  if (!text.includes("план")) return null;
+
+  const range = text.match(/^(\d{1,2})\s*[-–]\s*(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})/);
+  if (!range) return null;
+
+  const startDay = Number(range[1]);
+  const endDay = Number(range[2]);
+  const month = Number(range[3]) - 1;
+  const year = Number(range[4]);
+
+  const startDate = new Date(year, month, startDay);
+  const endDate = new Date(year, month, endDay);
+
+  return {
+    startDate,
+    endDate,
+    startISO: toISODate(startDate),
+    endISO: toISODate(endDate)
+  };
 }
 
 function toISODate(date) {
@@ -164,6 +200,82 @@ function toISODate(date) {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+function formatDate(date) {
+  return new Intl.DateTimeFormat("uk-UA", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  }).format(date);
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat("uk-UA", {
+    maximumFractionDigits: 0
+  }).format(value || 0);
+}
+
+function formatPlanNumber(value) {
+  return new Intl.NumberFormat("uk-UA", {
+    minimumFractionDigits: value % 1 ? 1 : 0,
+    maximumFractionDigits: 1
+  }).format(value || 0);
+}
+
+function formatPercent(value) {
+  return `${new Intl.NumberFormat("uk-UA", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1
+  }).format(value || 0)}%`;
+}
+
+function formatPlanFactPercent(fact, plan) {
+  if (!plan) return "—";
+  return formatPercent((fact / plan) * 100);
+}
+
+function safeConversion(sales, calls) {
+  if (!calls) return 0;
+  return (sales / calls) * 100;
+}
+
+function safePlanFact(fact, plan) {
+  if (!plan) return 0;
+  return (fact / plan) * 100;
+}
+
+function getWeekStart(date) {
+  const d = new Date(date);
+  const day = d.getDay(); // 0 Sunday, 1 Monday
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  d.setDate(diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function daysInclusive(startDate, endDate) {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  start.setHours(0, 0, 0, 0);
+  end.setHours(0, 0, 0, 0);
+
+  return Math.max(0, Math.round((end - start) / 86400000) + 1);
+}
+
+function overlapDays(aStart, aEnd, bStart, bEnd) {
+  const start = new Date(Math.max(aStart.getTime(), bStart.getTime()));
+  const end = new Date(Math.min(aEnd.getTime(), bEnd.getTime()));
+
+  if (end < start) return 0;
+  return daysInclusive(start, end);
+}
+
+function getDateRangeFromISO(fromISO, toISO) {
+  return {
+    startDate: new Date(`${fromISO}T00:00:00`),
+    endDate: new Date(`${toISO}T00:00:00`)
+  };
 }
 
 function getCurrentWeekRange() {
@@ -230,41 +342,6 @@ function setQuickRange(rangeType) {
   applyFilters();
 }
 
-function formatDate(date) {
-  return new Intl.DateTimeFormat("uk-UA", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric"
-  }).format(date);
-}
-
-function formatNumber(value) {
-  return new Intl.NumberFormat("uk-UA", {
-    maximumFractionDigits: 0
-  }).format(value || 0);
-}
-
-function formatPercent(value) {
-  return `${new Intl.NumberFormat("uk-UA", {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1
-  }).format(value || 0)}%`;
-}
-
-function safeConversion(sales, calls) {
-  if (!calls) return 0;
-  return (sales / calls) * 100;
-}
-
-function getWeekStart(date) {
-  const d = new Date(date);
-  const day = d.getDay(); // 0 Sunday, 1 Monday
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
 function getGroupKey(date, groupBy) {
   if (groupBy === "day") return toISODate(date);
 
@@ -280,6 +357,29 @@ function getGroupKey(date, groupBy) {
   }
 
   return toISODate(date);
+}
+
+function getGroupDateRange(periodKey, groupBy) {
+  const startDate = new Date(`${periodKey}T00:00:00`);
+
+  if (groupBy === "day") {
+    return { startDate, endDate: new Date(startDate) };
+  }
+
+  if (groupBy === "week") {
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 6);
+    return { startDate, endDate };
+  }
+
+  if (groupBy === "month") {
+    const [year, month] = periodKey.split("-").map(Number);
+    const monthStart = new Date(year, month - 1, 1);
+    const monthEnd = new Date(year, month, 0);
+    return { startDate: monthStart, endDate: monthEnd };
+  }
+
+  return { startDate, endDate: new Date(startDate) };
 }
 
 function formatGroupLabel(key, groupBy) {
@@ -322,6 +422,25 @@ function sumRows(rows) {
   });
 }
 
+function sumPlansForRange(rows, startDate, endDate) {
+  return rows.reduce((acc, row) => {
+    const totalPlanDays = daysInclusive(row.startDate, row.endDate);
+    const overlap = overlapDays(row.startDate, row.endDate, startDate, endDate);
+
+    if (!totalPlanDays || !overlap) return acc;
+
+    const ratio = overlap / totalPlanDays;
+
+    acc.callsPlan += row.callsPlan * ratio;
+    acc.salesPlan += row.salesPlan * ratio;
+
+    return acc;
+  }, {
+    callsPlan: 0,
+    salesPlan: 0
+  });
+}
+
 // =====================================================
 // GOOGLE SHEETS FETCH
 // =====================================================
@@ -341,20 +460,29 @@ async function fetchSheet(manager, sheetName) {
     // Якщо вкладки немає або Google повернув помилку — просто пропускаємо цей місяць
     if (data.status === "error") {
       console.warn(`Пропущено: ${manager.name} / ${sheetName}`, data.errors);
-      return [];
+      return { facts: [], plans: [] };
     }
 
     if (!data.table || !data.table.rows) {
       console.warn(`Порожня або недоступна вкладка: ${manager.name} / ${sheetName}`);
-      return [];
+      return { facts: [], plans: [] };
     }
 
-    return data.table.rows
-      .map((r) => normalizeRow(manager.name, sheetName, r))
-      .filter(Boolean);
+    const facts = [];
+    const plans = [];
+
+    data.table.rows.forEach((r) => {
+      const factRow = normalizeRow(manager.name, sheetName, r);
+      if (factRow) facts.push(factRow);
+
+      const planRow = normalizePlanRow(manager.name, sheetName, r);
+      if (planRow) plans.push(planRow);
+    });
+
+    return { facts, plans };
   } catch (error) {
     console.warn(`Не вдалося прочитати: ${manager.name} / ${sheetName}`, error);
-    return [];
+    return { facts: [], plans: [] };
   }
 }
 
@@ -385,6 +513,25 @@ function normalizeRow(managerName, sheetName, googleRow) {
   };
 }
 
+function normalizePlanRow(managerName, sheetName, googleRow) {
+  const c = googleRow.c || [];
+  const cols = CONFIG.columns;
+  const range = parsePlanRange(c[cols.date]);
+
+  if (!range) return null;
+
+  return {
+    manager: managerName,
+    sheet: sheetName,
+    startDate: range.startDate,
+    endDate: range.endDate,
+    startISO: range.startISO,
+    endISO: range.endISO,
+    callsPlan: numberValue(c[cols.calls]),
+    salesPlan: numberValue(c[cols.salesPlan])
+  };
+}
+
 async function loadData() {
   setStatus("Завантаження даних...");
 
@@ -397,7 +544,9 @@ async function loadData() {
   });
 
   const results = await Promise.all(tasks);
-  rawRows = results.flat().sort((a, b) => a.date - b.date);
+
+  rawRows = results.flatMap((r) => r.facts).sort((a, b) => a.date - b.date);
+  planRows = results.flatMap((r) => r.plans).sort((a, b) => a.startDate - b.startDate);
 
   if (!rawRows.length) {
     throw new Error(
@@ -436,11 +585,19 @@ function applyFilters() {
   const dateFrom = $("dateFrom").value;
   const dateTo = $("dateTo").value;
 
+  const selectedStart = new Date(`${dateFrom}T00:00:00`);
+  const selectedEnd = new Date(`${dateTo}T00:00:00`);
+
   filteredRows = rawRows.filter((row) => {
     if (manager !== "all" && row.manager !== manager) return false;
     if (dateFrom && row.dateISO < dateFrom) return false;
     if (dateTo && row.dateISO > dateTo) return false;
     return true;
+  });
+
+  filteredPlanRows = planRows.filter((row) => {
+    if (manager !== "all" && row.manager !== manager) return false;
+    return overlapDays(row.startDate, row.endDate, selectedStart, selectedEnd) > 0;
   });
 
   renderDashboard();
@@ -471,10 +628,31 @@ function renderKpis() {
   const totals = sumRows(filteredRows);
   const conversion = safeConversion(totals.salesFact, totals.calls);
 
+  const dateFrom = $("dateFrom").value;
+  const dateTo = $("dateTo").value;
+  const { startDate, endDate } = getDateRangeFromISO(dateFrom, dateTo);
+  const planTotals = sumPlansForRange(filteredPlanRows, startDate, endDate);
+
   $("kpiCalls").textContent = formatNumber(totals.calls);
   $("kpiCallsLong").textContent = formatNumber(totals.callsLong);
   $("kpiSalesFact").textContent = formatNumber(totals.salesFact);
   $("kpiConversion").textContent = formatPercent(conversion);
+
+  if ($("kpiCallsPlanFact")) {
+    $("kpiCallsPlanFact").textContent = formatPlanFactPercent(totals.calls, planTotals.callsPlan);
+  }
+
+  if ($("kpiCallsPlanFactNote")) {
+    $("kpiCallsPlanFactNote").textContent = `План ${formatPlanNumber(planTotals.callsPlan)} / факт ${formatNumber(totals.calls)}`;
+  }
+
+  if ($("kpiSalesPlanFact")) {
+    $("kpiSalesPlanFact").textContent = formatPlanFactPercent(totals.salesFact, planTotals.salesPlan);
+  }
+
+  if ($("kpiSalesPlanFactNote")) {
+    $("kpiSalesPlanFactNote").textContent = `План ${formatPlanNumber(planTotals.salesPlan)} / факт ${formatNumber(totals.salesFact)}`;
+  }
 }
 
 function groupByPeriod(rows) {
@@ -690,10 +868,21 @@ function renderTable() {
       if (byPeriod !== 0) return byPeriod;
       return a.manager.localeCompare(b.manager);
     })
-    .map((g) => ({
-      ...g,
-      ...sumRows(g.rows)
-    }));
+    .map((g) => {
+      const factTotals = sumRows(g.rows);
+      const range = getGroupDateRange(g.periodKey, groupBy);
+      const managerPlans = filteredPlanRows.filter((p) => p.manager === g.manager);
+      const planTotals = sumPlansForRange(managerPlans, range.startDate, range.endDate);
+
+      return {
+        ...g,
+        ...factTotals,
+        callsPlan: planTotals.callsPlan,
+        salesPlanTotal: planTotals.salesPlan,
+        callsPlanFact: safePlanFact(factTotals.calls, planTotals.callsPlan),
+        salesPlanFact: safePlanFact(factTotals.salesFact, planTotals.salesPlan)
+      };
+    });
 
   $("rowsCount").textContent = `${grouped.length} рядків`;
 
@@ -703,7 +892,7 @@ function renderTable() {
   if (!grouped.length) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="8">Немає даних за вибраним фільтром.</td>
+        <td colspan="12">Немає даних за вибраним фільтром.</td>
       </tr>
     `;
     return;
@@ -722,6 +911,10 @@ function renderTable() {
       <td>${formatNumber(row.salesAgreed)}</td>
       <td><strong>${formatNumber(row.salesFact)}</strong></td>
       <td class="positive">${formatPercent(conversion)}</td>
+      <td>${formatPlanNumber(row.callsPlan)}</td>
+      <td class="plan-fact-cell">${formatPlanFactPercent(row.calls, row.callsPlan)}</td>
+      <td>${formatPlanNumber(row.salesPlanTotal)}</td>
+      <td class="plan-fact-cell">${formatPlanFactPercent(row.salesFact, row.salesPlanTotal)}</td>
     `;
 
     tbody.appendChild(tr);
