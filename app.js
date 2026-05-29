@@ -131,6 +131,70 @@ function toISODate(date) {
   return `${y}-${m}-${d}`;
 }
 
+function getCurrentWeekRange() {
+  const today = new Date();
+  const start = getWeekStart(today);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+
+  return {
+    from: toISODate(start),
+    to: toISODate(end)
+  };
+}
+
+function getCurrentMonthRange() {
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth(), 1);
+  const end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+  return {
+    from: toISODate(start),
+    to: toISODate(end)
+  };
+}
+
+function getCurrentYearRange() {
+  const today = new Date();
+  const start = new Date(today.getFullYear(), 0, 1);
+  const end = new Date(today.getFullYear(), 11, 31);
+
+  return {
+    from: toISODate(start),
+    to: toISODate(end)
+  };
+}
+
+function setQuickRange(rangeType) {
+  let range;
+
+  if (rangeType === "week") {
+    range = getCurrentWeekRange();
+    $("groupBy").value = "day";
+  }
+
+  if (rangeType === "month") {
+    range = getCurrentMonthRange();
+    $("groupBy").value = "day";
+  }
+
+  if (rangeType === "year") {
+    range = getCurrentYearRange();
+    $("groupBy").value = "month";
+  }
+
+  if (!range) return;
+
+  $("dateFrom").value = range.from;
+  $("dateTo").value = range.to;
+
+  document.querySelectorAll(".quick-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.range === rangeType);
+  });
+
+  applyFilters();
+}
+
 function formatDate(date) {
   return new Intl.DateTimeFormat("uk-UA", {
     day: "2-digit",
@@ -646,6 +710,20 @@ $("reloadBtn").addEventListener("click", async () => {
     setStatus("Помилка завантаження");
     alert(error.message);
   }
+});
+
+document.querySelectorAll(".quick-btn").forEach((button) => {
+  button.addEventListener("click", () => {
+    setQuickRange(button.dataset.range);
+  });
+});
+
+["dateFrom", "dateTo"].forEach((id) => {
+  $(id).addEventListener("change", () => {
+    document.querySelectorAll(".quick-btn").forEach((btn) => {
+      btn.classList.remove("active");
+    });
+  });
 });
 
 // =====================================================
