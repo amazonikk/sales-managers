@@ -2,7 +2,12 @@
 // MONTH TABS
 // =====================================================
 // Формат вкладок у Google Sheets: "06/2026", "07/2026", "08/2026"
-// Якщо вкладки ще немає — код її просто пропустить.
+// Тут задаємо діапазон місяців, які дашборд буде пробувати читати.
+//
+// Важливо:
+// якщо вкладка ще не створена в Google Sheets — код її просто пропустить.
+// Коли ти створиш нову вкладку, наприклад "08/2026", вона автоматично підтягнеться,
+// якщо цей місяць входить у діапазон нижче.
 const MONTH_TABS = generateMonthTabs("06/2026", "12/2026");
 
 // =====================================================
@@ -10,52 +15,52 @@ const MONTH_TABS = generateMonthTabs("06/2026", "12/2026");
 // =====================================================
 const CONFIG = {
   managers: [
-    {
-      name: "Вова",
-      sheetId: "18qXgAeBLSTCXON_dyRRPsffxJOrNadlaXYZlZq3RgXs",
-      sheetTabs: MONTH_TABS
-    },
-    {
-      name: "Бек",
-      sheetId: "1hBZD4O4eO95kauZA-dnWHDVAbEmuw3qToqdhgnYf2hk",
-      sheetTabs: MONTH_TABS
-    },
-    {
-      name: "Максим",
-      sheetId: "1VIrQHz4U3IhZ_FE_m9-jg8mZdrLukgtYgXwENGA66Bs",
-      sheetTabs: MONTH_TABS
-    },
-    {
-      name: "Руслан",
-      sheetId: "1xVil9pW_2406goqECY8vLKRN2Liu8UOfVhLEBmM4nYM",
-      sheetTabs: MONTH_TABS
-    },
-    {
-      name: "Саша",
-      sheetId: "1YUtZdwIAH8HZPO8K7Ocp1JPRaf0EGkcLe6WWZCU1Ovo",
-      sheetTabs: MONTH_TABS
-    },
-    {
-      name: "Sid",
-      sheetId: "1xr1P3NTY0hAxa9tB-Maen4unn_tkyZgCbi4vJJ16QXI",
-      sheetTabs: MONTH_TABS
-    },
-    {
-      name: "Oumaima",
-      sheetId: "1S8VYkGncjGSncHfpXb0OhA8qzBSn5oSWAQF-p-LLZ4c",
-      sheetTabs: MONTH_TABS
-    },
-    {
-      name: "M'hammed",
-      sheetId: "1NEViDBeyAeBi0o4Q513tqtPzar5jsx2q1CPCwPIctUM",
-      sheetTabs: MONTH_TABS
-    },
-    {
-      name: "Arda",
-      sheetId: "1b4M6sle0tHZq51QVvIPWaj-4bK_RaKc8MZsXKkpq_50",
-      sheetTabs: MONTH_TABS
-    }
-  ],
+  {
+    name: "Вова",
+    sheetId: "18qXgAeBLSTCXON_dyRRPsffxJOrNadlaXYZlZq3RgXs",
+    sheetTabs: MONTH_TABS
+  },
+  {
+    name: "Бек",
+    sheetId: "1hBZD4O4eO95kauZA-dnWHDVAbEmuw3qToqdhgnYf2hk",
+    sheetTabs: MONTH_TABS
+  },
+  {
+    name: "Максим",
+    sheetId: "1VIrQHz4U3IhZ_FE_m9-jg8mZdrLukgtYgXwENGA66Bs",
+    sheetTabs: MONTH_TABS
+  },
+  {
+    name: "Руслан",
+    sheetId: "1xVil9pW_2406goqECY8vLKRN2Liu8UOfVhLEBmM4nYM",
+    sheetTabs: MONTH_TABS
+  },
+  {
+    name: "Саша",
+    sheetId: "1YUtZdwIAH8HZPO8K7Ocp1JPRaf0EGkcLe6WWZCU1Ovo",
+    sheetTabs: MONTH_TABS
+  },
+  {
+    name: "Sid",
+    sheetId: "1xr1P3NTY0hAxa9tB-Maen4unn_tkyZgCbi4vJJ16QXI",
+    sheetTabs: MONTH_TABS
+  },
+  {
+    name: "Oumaima",
+    sheetId: "1S8VYkGncjGSncHfpXb0OhA8qzBSn5oSWAQF-p-LLZ4c",
+    sheetTabs: MONTH_TABS
+  },
+  {
+    name: "M'hammed",
+    sheetId: "1NEViDBeyAeBi0o4Q513tqtPzar5jsx2q1CPCwPIctUM",
+    sheetTabs: MONTH_TABS
+  },
+  {
+    name: "Arda",
+    sheetId: "1b4M6sle0tHZq51QVvIPWaj-4bK_RaKc8MZsXKkpq_50",
+    sheetTabs: MONTH_TABS
+  }
+],
 
   // Індекси колонок у Google Sheets. A = 0, B = 1, C = 2...
   columns: {
@@ -129,10 +134,8 @@ function parseGoogleDate(cell) {
   if (value instanceof Date) return value;
 
   if (typeof value === "string") {
-    const clean = value.trim();
-
     // Формат Google Visualization API: Date(2026,5,1)
-    const gviz = clean.match(/^Date\((\d{4}),(\d{1,2}),(\d{1,2})\)$/);
+    const gviz = value.match(/^Date\((\d{4}),(\d{1,2}),(\d{1,2})\)$/);
     if (gviz) {
       const year = Number(gviz[1]);
       const month = Number(gviz[2]); // 0-based
@@ -140,28 +143,16 @@ function parseGoogleDate(cell) {
       return new Date(year, month, day);
     }
 
-    // Підтримує:
-    // 01.06.2026
-    // 01-06-2026
-    // 01/06/2026
-    const european = clean.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})$/);
-    if (european) {
-      const day = Number(european[1]);
-      const month = Number(european[2]) - 1;
-      const year = Number(european[3]);
+    // Формат 01.06.2026
+    const dot = value.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+    if (dot) {
+      const day = Number(dot[1]);
+      const month = Number(dot[2]) - 1;
+      const year = Number(dot[3]);
       return new Date(year, month, day);
     }
 
-    // Підтримує:
-    // 2026-06-01
-    const iso = clean.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-    if (iso) {
-      const year = Number(iso[1]);
-      const month = Number(iso[2]) - 1;
-      const day = Number(iso[3]);
-      return new Date(year, month, day);
-    }
-
+    // Якщо це тижневий рядок типу "01-05.06.2026 факт" — ігноруємо
     return null;
   }
 
@@ -347,6 +338,7 @@ async function fetchSheet(manager, sheetName) {
 
     const data = JSON.parse(jsonText);
 
+    // Якщо вкладки немає або Google повернув помилку — просто пропускаємо цей місяць
     if (data.status === "error") {
       console.warn(`Пропущено: ${manager.name} / ${sheetName}`, data.errors);
       return [];
@@ -425,10 +417,8 @@ async function loadData() {
 // =====================================================
 function initFilters() {
   const managerSelect = $("managerFilter");
-  const selectedBeforeUpdate = managerSelect.value || "all";
 
   managerSelect.innerHTML = `<option value="all">Всі менеджери</option>`;
-
   CONFIG.managers.forEach((m) => {
     const opt = document.createElement("option");
     opt.value = m.name;
@@ -436,14 +426,9 @@ function initFilters() {
     managerSelect.appendChild(opt);
   });
 
-  if ([...managerSelect.options].some((option) => option.value === selectedBeforeUpdate)) {
-    managerSelect.value = selectedBeforeUpdate;
-  }
-
   const dates = rawRows.map((r) => r.dateISO).sort();
-
-  if (!$("dateFrom").value) $("dateFrom").value = dates[0];
-  if (!$("dateTo").value) $("dateTo").value = dates[dates.length - 1];
+  $("dateFrom").value = dates[0];
+  $("dateTo").value = dates[dates.length - 1];
 }
 
 function applyFilters() {
@@ -468,10 +453,6 @@ function resetFilters() {
   const dates = rawRows.map((r) => r.dateISO).sort();
   $("dateFrom").value = dates[0];
   $("dateTo").value = dates[dates.length - 1];
-
-  document.querySelectorAll(".quick-btn").forEach((btn) => {
-    btn.classList.remove("active");
-  });
 
   applyFilters();
 }
@@ -792,7 +773,7 @@ loadData().catch((error) => {
     "Перевір:\n" +
     "1. Таблиці доступні для перегляду за посиланням.\n" +
     "2. Назви вкладок у форматі 06/2026, 07/2026.\n" +
-    "3. Дати в колонці A можуть бути 01-06-2026 або 01.06.2026.\n" +
+    "3. Дати в колонці A мають бути реальними датами.\n" +
     "4. Структура колонок не змінилася.\n\n" +
     error.message
   );
