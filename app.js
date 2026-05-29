@@ -1,8 +1,19 @@
 // =====================================================
+// SALES DASHBOARD APP
+// =====================================================
+// Що робить цей файл:
+// 1. Читає Google Sheets по кожному менеджеру.
+// 2. Читає вкладки-місяці у форматі "06/2026", "07/2026".
+// 3. Рахує ТІЛЬКИ денні рядки з датами.
+// 4. Ігнорує рядки типу "01-05.06.2026 план" / "01-05.06.2026 факт".
+// 5. Дає фільтри: менеджер, дата, день/тиждень/місяць.
+// 6. Підтримує швидкі кнопки: цей тиждень, цей місяць, цей рік.
+
+// =====================================================
 // MONTH TABS
 // =====================================================
-// Формат вкладок у Google Sheets: "06/2026", "07/2026", "08/2026"
-// Якщо вкладки ще немає — код її просто пропустить.
+// Якщо потрібні нові місяці — зміни кінець діапазону.
+// Наприклад: generateMonthTabs("06/2026", "12/2027")
 const MONTH_TABS = generateMonthTabs("06/2026", "12/2026");
 
 // =====================================================
@@ -57,17 +68,18 @@ const CONFIG = {
     }
   ],
 
-  // Індекси колонок у Google Sheets. A = 0, B = 1, C = 2...
+  // Індекси колонок у Google Sheets.
+  // A = 0, B = 1, C = 2, D = 3...
   columns: {
-    date: 0,          // A
-    calls: 3,         // D — Кол-во звонков общее везде
-    callsLong: 4,     // E — Кол-во звонков более 1 мин
-    messagesNoCall: 5,// F — Кол-во сообщений людей без звонка
-    newCrm: 6,        // G — Кол-во новых людей в срм
-    nonTarget: 7,     // H — Кол-во нецелевых звонков/сообщений
-    salesPlan: 8,     // I
-    salesAgreed: 9,   // J — Договоренность о приезде / оплате
-    salesFact: 22     // W — Кол-во продаж факт Общее
+    date: 0,           // A — дата
+    calls: 3,          // D — Кол-во звонков общее везде
+    callsLong: 4,      // E — Кол-во звонков более 1 мин
+    messagesNoCall: 5, // F — Кол-во сообщений людей без звонка
+    newCrm: 6,         // G — Кол-во новых людей в CRM
+    nonTarget: 7,      // H — Кол-во нецелевых звонков/сообщений
+    salesPlan: 8,      // I — Кол-во продаж план
+    salesAgreed: 9,    // J — Кол-во продаж / договоренность
+    salesFact: 22      // W — Кол-во продаж факт Общее
   }
 };
 
@@ -82,14 +94,14 @@ let managerChart = null;
 const $ = (id) => document.getElementById(id);
 
 // =====================================================
-// HELPERS
+// BASIC HELPERS
 // =====================================================
 function generateMonthTabs(start, end) {
   const [startMonth, startYear] = start.split("/").map(Number);
   const [endMonth, endYear] = end.split("/").map(Number);
 
   const result = [];
-  let current = new Date(startYear, startMonth - 1, 1);
+  const current = new Date(startYear, startMonth - 1, 1);
   const last = new Date(endYear, endMonth - 1, 1);
 
   while (current <= last) {
@@ -104,6 +116,39 @@ function generateMonthTabs(start, end) {
 
 function setStatus(text) {
   $("status").textContent = text;
+}
+
+function toISODate(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function formatDate(date) {
+  return new Intl.DateTimeFormat("uk-UA", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  }).format(date);
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat("uk-UA", {
+    maximumFractionDigits: 0
+  }).format(value || 0);
+}
+
+function formatPercent(value) {
+  return `${new Intl.NumberFormat("uk-UA", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1
+  }).format(value || 0)}%`;
+}
+
+function safeConversion(sales, calls) {
+  if (!calls) return 0;
+  return (sales / calls) * 100;
 }
 
 function numberValue(cell) {
@@ -121,58 +166,97 @@ function numberValue(cell) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+// =====================================================
+// DATE PARSING
+// =====================================================
+function getCellText(cell) {
+  if (!cell) return "";
+  return String(cell.f ?? cell.v ?? "").trim();
+}
+
 function parseGoogleDate(cell) {
   if (!cell) return null;
 
-  const value = cell.v ?? cell.f ?? cell;
+  const rawValue = cell.v;
+  const formattedValue = getCellText(cell);
 
-  if (value instanceof Date) return value;
-
-  if (typeof value === "string") {
-    const clean = value.trim();
-
-    // Формат Google Visualization API: Date(2026,5,1)
-    const gviz = clean.match(/^Date\((\d{4}),(\d{1,2}),(\d{1,2})\)$/);
-    if (gviz) {
-      const year = Number(gviz[1]);
-      const month = Number(gviz[2]); // 0-based
-      const day = Number(gviz[3]);
+  // 1. Google Visualization часто повертає реальну дату так:
+  // Date(2026,5,1)
+  if (typeof rawValue === "string") {
+    const gvizDate = rawValue.match(/^Date\((\d{4}),(\d{1,2}),(\d{1,2})\)$/);
+    if (gvizDate) {
+      const year = Number(gvizDate[1]);
+      const month = Number(gvizDate[2]); // 0-based
+      const day = Number(gvizDate[3]);
       return new Date(year, month, day);
     }
+  }
 
-    // Підтримує:
-    // 01.06.2026
-    // 01-06-2026
-    // 01/06/2026
-    const european = clean.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})$/);
-    if (european) {
-      const day = Number(european[1]);
-      const month = Number(european[2]) - 1;
-      const year = Number(european[3]);
+  // 2. Якщо в таблиці дата текстом:
+  // 01-06-2026
+  // 01.06.2026
+  // 01/06/2026
+  // ВАЖЛИВО: тільки повністю денний формат.
+  // Рядки типу "01-05.06.2026 факт" НЕ пройдуть.
+  const dailyDate = formattedValue.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})$/);
+  if (dailyDate) {
+    const day = Number(dailyDate[1]);
+    const month = Number(dailyDate[2]) - 1;
+    const year = Number(dailyDate[3]);
+
+    if (day >= 1 && day <= 31 && month >= 0 && month <= 11) {
       return new Date(year, month, day);
     }
+  }
 
-    // Підтримує:
-    // 2026-06-01
-    const iso = clean.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-    if (iso) {
-      const year = Number(iso[1]);
-      const month = Number(iso[2]) - 1;
-      const day = Number(iso[3]);
+  // 3. ISO формат:
+  // 2026-06-01
+  const isoDate = formattedValue.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (isoDate) {
+    const year = Number(isoDate[1]);
+    const month = Number(isoDate[2]) - 1;
+    const day = Number(isoDate[3]);
+
+    if (day >= 1 && day <= 31 && month >= 0 && month <= 11) {
       return new Date(year, month, day);
     }
-
-    return null;
   }
 
   return null;
 }
 
-function toISODate(date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+function isSummaryRow(cell) {
+  const text = getCellText(cell).toLowerCase();
+
+  if (!text) return true;
+
+  // Явно пропускаємо тижневі/підсумкові рядки.
+  // Наприклад:
+  // 01-05.06.2026 план
+  // 01-05.06.2026 факт
+  // 1-05.06.2026 факт
+  if (text.includes("план")) return true;
+  if (text.includes("факт")) return true;
+  if (text.includes("итог")) return true;
+  if (text.includes("підсум")) return true;
+  if (text.includes("итого")) return true;
+
+  // Рядок з діапазоном дат — теж не денний рядок.
+  if (/^\d{1,2}\s*[-–]\s*\d{1,2}[.\-/]\d{1,2}[.\-/]\d{4}/.test(text)) return true;
+
+  return false;
+}
+
+// =====================================================
+// QUICK RANGE HELPERS
+// =====================================================
+function getWeekStart(date) {
+  const d = new Date(date);
+  const day = d.getDay(); // 0 Sunday, 1 Monday
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  d.setDate(diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
 
 function getCurrentWeekRange() {
@@ -210,7 +294,7 @@ function getCurrentYearRange() {
 }
 
 function setQuickRange(rangeType) {
-  let range;
+  let range = null;
 
   if (rangeType === "week") {
     range = getCurrentWeekRange();
@@ -239,41 +323,9 @@ function setQuickRange(rangeType) {
   applyFilters();
 }
 
-function formatDate(date) {
-  return new Intl.DateTimeFormat("uk-UA", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric"
-  }).format(date);
-}
-
-function formatNumber(value) {
-  return new Intl.NumberFormat("uk-UA", {
-    maximumFractionDigits: 0
-  }).format(value || 0);
-}
-
-function formatPercent(value) {
-  return `${new Intl.NumberFormat("uk-UA", {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1
-  }).format(value || 0)}%`;
-}
-
-function safeConversion(sales, calls) {
-  if (!calls) return 0;
-  return (sales / calls) * 100;
-}
-
-function getWeekStart(date) {
-  const d = new Date(date);
-  const day = d.getDay(); // 0 Sunday, 1 Monday
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
+// =====================================================
+// GROUPING HELPERS
+// =====================================================
 function getGroupKey(date, groupBy) {
   if (groupBy === "day") return toISODate(date);
 
@@ -358,7 +410,7 @@ async function fetchSheet(manager, sheetName) {
     }
 
     return data.table.rows
-      .map((r) => normalizeRow(manager.name, sheetName, r))
+      .map((row, index) => normalizeRow(manager.name, sheetName, row, index + 1))
       .filter(Boolean);
   } catch (error) {
     console.warn(`Не вдалося прочитати: ${manager.name} / ${sheetName}`, error);
@@ -366,19 +418,25 @@ async function fetchSheet(manager, sheetName) {
   }
 }
 
-function normalizeRow(managerName, sheetName, googleRow) {
+function normalizeRow(managerName, sheetName, googleRow, rowNumber) {
   const c = googleRow.c || [];
   const cols = CONFIG.columns;
 
-  const date = parseGoogleDate(c[cols.date]);
+  const dateCell = c[cols.date];
 
-  // Беремо тільки денні рядки з реальною датою.
-  // Рядки план/факт по тижнях автоматично пропускаються.
+  // Головний захист від подвійного рахунку:
+  // якщо це план/факт/тижневий підсумок — пропускаємо.
+  if (isSummaryRow(dateCell)) return null;
+
+  const date = parseGoogleDate(dateCell);
+
+  // Беремо тільки рядки з реальною денною датою.
   if (!date) return null;
 
-  return {
+  const row = {
     manager: managerName,
     sheet: sheetName,
+    rowNumber,
     date,
     dateISO: toISODate(date),
 
@@ -391,6 +449,21 @@ function normalizeRow(managerName, sheetName, googleRow) {
     salesAgreed: numberValue(c[cols.salesAgreed]),
     salesFact: numberValue(c[cols.salesFact])
   };
+
+  // Якщо весь рядок повністю пустий по метриках — не додаємо.
+  const totalActivity =
+    row.calls +
+    row.callsLong +
+    row.messagesNoCall +
+    row.newCrm +
+    row.nonTarget +
+    row.salesPlan +
+    row.salesAgreed +
+    row.salesFact;
+
+  if (totalActivity === 0) return null;
+
+  return row;
 }
 
 async function loadData() {
@@ -409,15 +482,32 @@ async function loadData() {
 
   if (!rawRows.length) {
     throw new Error(
-      "Не знайдено жодного денного рядка з датою. Перевір назви вкладок, доступ до Google Sheets і формат дат у колонці A."
+      "Не знайдено жодного денного рядка з датою. Перевір доступ до Google Sheets, назви вкладок і формат дат у колонці A."
     );
   }
 
   initFilters();
   applyFilters();
 
+  const loadedManagers = [...new Set(rawRows.map((r) => r.manager))].join(", ");
   const loadedTabs = [...new Set(rawRows.map((r) => r.sheet))].join(", ");
-  setStatus(`Оновлено: ${new Date().toLocaleTimeString("uk-UA", { hour: "2-digit", minute: "2-digit" })} · Листи: ${loadedTabs}`);
+
+  setStatus(
+    `Оновлено: ${new Date().toLocaleTimeString("uk-UA", {
+      hour: "2-digit",
+      minute: "2-digit"
+    })} · Менеджери: ${loadedManagers} · Листи: ${loadedTabs}`
+  );
+
+  console.table(rawRows.map((r) => ({
+    manager: r.manager,
+    sheet: r.sheet,
+    row: r.rowNumber,
+    date: r.dateISO,
+    calls: r.calls,
+    callsLong: r.callsLong,
+    salesFact: r.salesFact
+  })));
 }
 
 // =====================================================
@@ -429,10 +519,10 @@ function initFilters() {
 
   managerSelect.innerHTML = `<option value="all">Всі менеджери</option>`;
 
-  CONFIG.managers.forEach((m) => {
+  CONFIG.managers.forEach((manager) => {
     const opt = document.createElement("option");
-    opt.value = m.name;
-    opt.textContent = m.name;
+    opt.value = manager.name;
+    opt.textContent = manager.name;
     managerSelect.appendChild(opt);
   });
 
