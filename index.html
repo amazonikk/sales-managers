@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sales Dashboard — Vova / Bek</title>
+
+  <link rel="stylesheet" href="./style.css" />
+
+  <!-- Chart.js для графіків -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">S</div>
+        <div>
+          <div class="brand-title">Sales Dashboard</div>
+          <div class="brand-subtitle">Calls · Sales · Conversion</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <label class="field">
+          <span>Менеджер</span>
+          <select id="managerFilter">
+            <option value="all">Всі менеджери</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Дата від</span>
+          <input type="date" id="dateFrom" />
+        </label>
+
+        <label class="field">
+          <span>Дата до</span>
+          <input type="date" id="dateTo" />
+        </label>
+
+        <label class="field">
+          <span>Групування</span>
+          <select id="groupBy">
+            <option value="day">По днях</option>
+            <option value="week">По тижнях</option>
+            <option value="month">По місяцях</option>
+          </select>
+        </label>
+
+        <button id="resetBtn" class="btn secondary">Скинути фільтри</button>
+        <button id="reloadBtn" class="btn primary">Оновити дані</button>
+      </div>
+
+      <div class="hint">
+        Дані тягнуться напряму з Google Sheets. Таблиці мають бути доступні для перегляду за посиланням.
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h1>Порівняння менеджерів</h1>
+          <p>Дзвінки, продажі та конверсія по вибраному періоду.</p>
+        </div>
+        <div id="status" class="status">Завантаження...</div>
+      </header>
+
+      <section class="kpi-grid">
+        <article class="kpi-card">
+          <div class="kpi-label">Дзвінки загалом</div>
+          <div id="kpiCalls" class="kpi-value">—</div>
+          <div class="kpi-note">Колонка D</div>
+        </article>
+
+        <article class="kpi-card">
+          <div class="kpi-label">Дзвінки більше 1 хв</div>
+          <div id="kpiCallsLong" class="kpi-value">—</div>
+          <div class="kpi-note">Колонка E</div>
+        </article>
+
+        <article class="kpi-card">
+          <div class="kpi-label">Продажі факт</div>
+          <div id="kpiSalesFact" class="kpi-value">—</div>
+          <div class="kpi-note">Колонка W</div>
+        </article>
+
+        <article class="kpi-card accent">
+          <div class="kpi-label">Конверсія</div>
+          <div id="kpiConversion" class="kpi-value">—</div>
+          <div class="kpi-note">Продажі факт / Дзвінки</div>
+        </article>
+      </section>
+
+      <section class="chart-grid">
+        <article class="chart-card wide">
+          <div class="card-head">
+            <div>
+              <h2>Динаміка по періоду</h2>
+              <p>Дзвінки та продажі за вибраним групуванням.</p>
+            </div>
+          </div>
+          <canvas id="timelineChart"></canvas>
+        </article>
+
+        <article class="chart-card">
+          <div class="card-head">
+            <div>
+              <h2>Порівняння</h2>
+              <p>Вова vs Бек за вибраний період.</p>
+            </div>
+          </div>
+          <canvas id="managerChart"></canvas>
+        </article>
+      </section>
+
+      <section class="table-card">
+        <div class="card-head">
+          <div>
+            <h2>Детальна таблиця</h2>
+            <p>Агрегація по менеджеру та вибраному періоду.</p>
+          </div>
+          <div id="rowsCount" class="rows-count">—</div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Період</th>
+                <th>Менеджер</th>
+                <th>Дзвінки</th>
+                <th>Дзвінки &gt;1 хв</th>
+                <th>Нові CRM</th>
+                <th>Домовленості</th>
+                <th>Продажі факт</th>
+                <th>Конверсія</th>
+              </tr>
+            </thead>
+            <tbody id="dataTable"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
