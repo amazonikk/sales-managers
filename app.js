@@ -1,19 +1,16 @@
 // =====================================================
 // SALES DASHBOARD APP
 // =====================================================
-// Що робить цей файл:
-// 1. Читає Google Sheets по кожному менеджеру.
-// 2. Читає вкладки-місяці у форматі "06/2026", "07/2026".
-// 3. Рахує ТІЛЬКИ денні рядки з датами.
-// 4. Ігнорує рядки типу "01-05.06.2026 план" / "01-05.06.2026 факт".
-// 5. Дає фільтри: менеджер, дата, день/тиждень/місяць.
-// 6. Підтримує швидкі кнопки: цей тиждень, цей місяць, цей рік.
+// Важливо:
+// Кожна вкладка-місяць читає тільки свої дати.
+// Наприклад:
+// вкладка "06/2026" бере тільки дати 01-06-2026 ... 30-06-2026
+// вкладка "07/2026" бере тільки дати 01-07-2026 ... 31-07-2026
+// Це захищає від дублювання, якщо вкладки 07/2026, 08/2026 були скопійовані з червня.
 
 // =====================================================
 // MONTH TABS
 // =====================================================
-// Якщо потрібні нові місяці — зміни кінець діапазону.
-// Наприклад: generateMonthTabs("06/2026", "12/2027")
 const MONTH_TABS = generateMonthTabs("06/2026", "12/2026");
 
 // =====================================================
@@ -68,18 +65,17 @@ const CONFIG = {
     }
   ],
 
-  // Індекси колонок у Google Sheets.
   // A = 0, B = 1, C = 2, D = 3...
   columns: {
-    date: 0,           // A — дата
-    calls: 3,          // D — Кол-во звонков общее везде
-    callsLong: 4,      // E — Кол-во звонков более 1 мин
-    messagesNoCall: 5, // F — Кол-во сообщений людей без звонка
-    newCrm: 6,         // G — Кол-во новых людей в CRM
-    nonTarget: 7,      // H — Кол-во нецелевых звонков/сообщений
-    salesPlan: 8,      // I — Кол-во продаж план
-    salesAgreed: 9,    // J — Кол-во продаж / договоренность
-    salesFact: 22      // W — Кол-во продаж факт Общее
+    date: 0,           // A
+    calls: 3,          // D
+    callsLong: 4,      // E
+    messagesNoCall: 5, // F
+    newCrm: 6,         // G
+    nonTarget: 7,      // H
+    salesPlan: 8,      // I
+    salesAgreed: 9,    // J
+    salesFact: 22      // W
   }
 };
 
@@ -94,7 +90,7 @@ let managerChart = null;
 const $ = (id) => document.getElementById(id);
 
 // =====================================================
-// BASIC HELPERS
+// HELPERS
 // =====================================================
 function generateMonthTabs(start, end) {
   const [startMonth, startYear] = start.split("/").map(Number);
@@ -114,8 +110,109 @@ function generateMonthTabs(start, end) {
   return result;
 }
 
+function parseSheetMonth(sheetName) {
+  const match = String(sheetName).trim().match(/^(\d{1,2})\/(\d{4})$/);
+  if (!match) return null;
+
+  return {
+    month: Number(match[1]) - 1, // JS month: 0-11
+    year: Number(match[2])
+  };
+}
+
+function isDateInsideSheetMonth(date, sheetName) {
+  const sheetMonth = parseSheetMonth(sheetName);
+  if (!sheetMonth) return true;
+
+  return (
+    date.getFullYear() === sheetMonth.year &&
+    date.getMonth() === sheetMonth.month
+  );
+}
+
 function setStatus(text) {
   $("status").textContent = text;
+}
+
+function getCellText(cell) {
+  if (!cell) return "";
+  return String(cell.f ?? cell.v ?? "").trim();
+}
+
+function numberValue(cell) {
+  if (!cell) return 0;
+
+  const value = cell.v ?? cell.f ?? 0;
+
+  if (typeof value === "number") return value;
+
+  const normalized = String(value)
+    .replace(/\s/g, "")
+    .replace(",", ".");
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function parseGoogleDate(cell) {
+  if (!cell) return null;
+
+  const raw = cell.v;
+  const text = getCellText(cell);
+
+  // Google Visualization date: Date(2026,5,1)
+  if (typeof raw === "string") {
+    const gviz = raw.match(/^Date\((\d{4}),(\d{1,2}),(\d{1,2})\)$/);
+    if (gviz) {
+      const year = Number(gviz[1]);
+      const month = Number(gviz[2]);
+      const day = Number(gviz[3]);
+      return new Date(year, month, day);
+    }
+  }
+
+  // dd-mm-yyyy / dd.mm.yyyy / dd/mm/yyyy
+  const european = text.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})$/);
+  if (european) {
+    const day = Number(european[1]);
+    const month = Number(european[2]) - 1;
+    const year = Number(european[3]);
+
+    if (day >= 1 && day <= 31 && month >= 0 && month <= 11) {
+      return new Date(year, month, day);
+    }
+  }
+
+  // yyyy-mm-dd
+  const iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (iso) {
+    const year = Number(iso[1]);
+    const month = Number(iso[2]) - 1;
+    const day = Number(iso[3]);
+
+    if (day >= 1 && day <= 31 && month >= 0 && month <= 11) {
+      return new Date(year, month, day);
+    }
+  }
+
+  return null;
+}
+
+function isSummaryRow(cell) {
+  const text = getCellText(cell).toLowerCase();
+
+  if (!text) return true;
+
+  if (text.includes("план")) return true;
+  if (text.includes("факт")) return true;
+  if (text.includes("итог")) return true;
+  if (text.includes("итого")) return true;
+  if (text.includes("підсум")) return true;
+
+  // діапазон дат: 01-05.06.2026
+  if (/^\d{1,2}\s*[-–]\s*\d{1,2}[.\-/]\d{1,2}[.\-/]\d{4}/.test(text)) return true;
+
+  return false;
 }
 
 function toISODate(date) {
@@ -151,114 +248,18 @@ function safeConversion(sales, calls) {
   return (sales / calls) * 100;
 }
 
-function numberValue(cell) {
-  if (!cell) return 0;
-
-  const value = cell.v ?? cell.f ?? 0;
-
-  if (typeof value === "number") return value;
-
-  const normalized = String(value)
-    .replace(/\s/g, "")
-    .replace(",", ".");
-
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-// =====================================================
-// DATE PARSING
-// =====================================================
-function getCellText(cell) {
-  if (!cell) return "";
-  return String(cell.f ?? cell.v ?? "").trim();
-}
-
-function parseGoogleDate(cell) {
-  if (!cell) return null;
-
-  const rawValue = cell.v;
-  const formattedValue = getCellText(cell);
-
-  // 1. Google Visualization часто повертає реальну дату так:
-  // Date(2026,5,1)
-  if (typeof rawValue === "string") {
-    const gvizDate = rawValue.match(/^Date\((\d{4}),(\d{1,2}),(\d{1,2})\)$/);
-    if (gvizDate) {
-      const year = Number(gvizDate[1]);
-      const month = Number(gvizDate[2]); // 0-based
-      const day = Number(gvizDate[3]);
-      return new Date(year, month, day);
-    }
-  }
-
-  // 2. Якщо в таблиці дата текстом:
-  // 01-06-2026
-  // 01.06.2026
-  // 01/06/2026
-  // ВАЖЛИВО: тільки повністю денний формат.
-  // Рядки типу "01-05.06.2026 факт" НЕ пройдуть.
-  const dailyDate = formattedValue.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})$/);
-  if (dailyDate) {
-    const day = Number(dailyDate[1]);
-    const month = Number(dailyDate[2]) - 1;
-    const year = Number(dailyDate[3]);
-
-    if (day >= 1 && day <= 31 && month >= 0 && month <= 11) {
-      return new Date(year, month, day);
-    }
-  }
-
-  // 3. ISO формат:
-  // 2026-06-01
-  const isoDate = formattedValue.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (isoDate) {
-    const year = Number(isoDate[1]);
-    const month = Number(isoDate[2]) - 1;
-    const day = Number(isoDate[3]);
-
-    if (day >= 1 && day <= 31 && month >= 0 && month <= 11) {
-      return new Date(year, month, day);
-    }
-  }
-
-  return null;
-}
-
-function isSummaryRow(cell) {
-  const text = getCellText(cell).toLowerCase();
-
-  if (!text) return true;
-
-  // Явно пропускаємо тижневі/підсумкові рядки.
-  // Наприклад:
-  // 01-05.06.2026 план
-  // 01-05.06.2026 факт
-  // 1-05.06.2026 факт
-  if (text.includes("план")) return true;
-  if (text.includes("факт")) return true;
-  if (text.includes("итог")) return true;
-  if (text.includes("підсум")) return true;
-  if (text.includes("итого")) return true;
-
-  // Рядок з діапазоном дат — теж не денний рядок.
-  if (/^\d{1,2}\s*[-–]\s*\d{1,2}[.\-/]\d{1,2}[.\-/]\d{4}/.test(text)) return true;
-
-  return false;
-}
-
-// =====================================================
-// QUICK RANGE HELPERS
-// =====================================================
 function getWeekStart(date) {
   const d = new Date(date);
-  const day = d.getDay(); // 0 Sunday, 1 Monday
+  const day = d.getDay();
   const diff = d.getDate() - day + (day === 0 ? -6 : 1);
   d.setDate(diff);
   d.setHours(0, 0, 0, 0);
   return d;
 }
 
+// =====================================================
+// QUICK PERIODS
+// =====================================================
 function getCurrentWeekRange() {
   const today = new Date();
   const start = getWeekStart(today);
@@ -324,7 +325,7 @@ function setQuickRange(rangeType) {
 }
 
 // =====================================================
-// GROUPING HELPERS
+// GROUPING
 // =====================================================
 function getGroupKey(date, groupBy) {
   if (groupBy === "day") return toISODate(date);
@@ -421,17 +422,18 @@ async function fetchSheet(manager, sheetName) {
 function normalizeRow(managerName, sheetName, googleRow, rowNumber) {
   const c = googleRow.c || [];
   const cols = CONFIG.columns;
-
   const dateCell = c[cols.date];
 
-  // Головний захист від подвійного рахунку:
-  // якщо це план/факт/тижневий підсумок — пропускаємо.
   if (isSummaryRow(dateCell)) return null;
 
   const date = parseGoogleDate(dateCell);
-
-  // Беремо тільки рядки з реальною денною датою.
   if (!date) return null;
+
+  // Ключове виправлення:
+  // якщо рядок з датою червня лежить у вкладці 07/2026 — не рахуємо.
+  if (!isDateInsideSheetMonth(date, sheetName)) {
+    return null;
+  }
 
   const row = {
     manager: managerName,
@@ -450,7 +452,6 @@ function normalizeRow(managerName, sheetName, googleRow, rowNumber) {
     salesFact: numberValue(c[cols.salesFact])
   };
 
-  // Якщо весь рядок повністю пустий по метриках — не додаємо.
   const totalActivity =
     row.calls +
     row.callsLong +
@@ -496,7 +497,7 @@ async function loadData() {
     `Оновлено: ${new Date().toLocaleTimeString("uk-UA", {
       hour: "2-digit",
       minute: "2-digit"
-    })} · Менеджери: ${loadedManagers} · Листи: ${loadedTabs}`
+    })} · Менеджери: ${loadedManagers} · Листи з даними: ${loadedTabs}`
   );
 
   console.table(rawRows.map((r) => ({
@@ -883,7 +884,7 @@ loadData().catch((error) => {
     "1. Таблиці доступні для перегляду за посиланням.\n" +
     "2. Назви вкладок у форматі 06/2026, 07/2026.\n" +
     "3. Дати в колонці A можуть бути 01-06-2026 або 01.06.2026.\n" +
-    "4. Структура колонок не змінилася.\n\n" +
+    "4. Дати всередині вкладки мають відповідати місяцю вкладки.\n\n" +
     error.message
   );
 });
