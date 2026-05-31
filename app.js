@@ -129,34 +129,22 @@ function numberValue(cell) {
 function parseGoogleDate(cell) {
   if (!cell) return null;
 
-  const value = cell.v ?? cell.f ?? cell;
+  // ВАЖЛИВО:
+  // Google іноді може віддавати тижневі/місячні підсумкові рядки як дату в cell.v,
+  // хоча на екрані у cell.f написано щось типу "01-05.06.2026 факт".
+  // Тому спочатку перевіряємо саме видимий текст клітинки.
+  const displayValue = String(cell.f ?? cell.v ?? cell).trim();
 
-  if (value instanceof Date) return value;
+  // Беремо ТІЛЬКИ денні рядки: 01.06.2026 або 01-06-2026.
+  // Рядки "01-05.06.2026 факт", "01-30.06.2026 факт", "план" автоматично відсікаються.
+  const dayMatch = displayValue.match(/^(\d{1,2})[.-](\d{1,2})[.-](\d{4})$/);
+  if (!dayMatch) return null;
 
-  if (typeof value === "string") {
-    // Формат Google Visualization API: Date(2026,5,1)
-    const gviz = value.match(/^Date\((\d{4}),(\d{1,2}),(\d{1,2})\)$/);
-    if (gviz) {
-      const year = Number(gviz[1]);
-      const month = Number(gviz[2]); // 0-based
-      const day = Number(gviz[3]);
-      return new Date(year, month, day);
-    }
+  const day = Number(dayMatch[1]);
+  const month = Number(dayMatch[2]) - 1;
+  const year = Number(dayMatch[3]);
 
-    // Формат 01.06.2026
-    const dot = value.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
-    if (dot) {
-      const day = Number(dot[1]);
-      const month = Number(dot[2]) - 1;
-      const year = Number(dot[3]);
-      return new Date(year, month, day);
-    }
-
-    // Якщо це тижневий рядок типу "01-05.06.2026 факт" — ігноруємо
-    return null;
-  }
-
-  return null;
+  return new Date(year, month, day);
 }
 
 function toISODate(date) {
