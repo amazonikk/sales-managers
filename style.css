@@ -393,6 +393,38 @@ tbody tr:hover {
   color: #fff;
   border-color: var(--brand);
 }
+
+/* PLAN / FACT STYLING */
+.plan-fact {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 14px;
+}
+
+.plan-fact .plan {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.plan-fact .fact {
+  font-weight: 900;
+}
+
+.execution-good {
+  color: var(--green);
+}
+
+.execution-bad {
+  color: #e63946;
+}
+
+.plan-fact-cell {
+  font-weight: 900;
+  white-space: nowrap;
+}
 /* =====================================================
    PLAN / FACT ADDITIONS
 ===================================================== */
@@ -403,12 +435,15 @@ tbody tr:hover {
 }
 
 .kpi-grid {
+  display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
 }
 
 @media (max-width: 1100px) {
   .kpi-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
