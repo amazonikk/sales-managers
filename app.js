@@ -136,7 +136,25 @@ function parseGoogleDate(cell) {
   if (typeof value === "string") {
     const str = value.trim();
 
-    // 01-06-2026 (дефіс)
+    // Google Visualization API: Date(2026,5,1)
+    const gviz = str.match(/^Date\((\d{4}),(\d{1,2}),(\d{1,2})\)$/);
+    if (gviz) {
+      const year = Number(gviz[1]);
+      const month = Number(gviz[2]); // 0-based
+      const day = Number(gviz[3]);
+      return new Date(year, month, day);
+    }
+
+    // Формат 01.06.2026 (крапки)
+    const dot = str.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+    if (dot) {
+      const day = Number(dot[1]);
+      const month = Number(dot[2]) - 1;
+      const year = Number(dot[3]);
+      return new Date(year, month, day);
+    }
+
+    // Формат 01-06-2026 (дефіс) — ТВОЙ ОСНОВНИЙ ФОРМАТ
     const dash = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
     if (dash) {
       const day = Number(dash[1]);
@@ -145,21 +163,17 @@ function parseGoogleDate(cell) {
       return new Date(year, month, day);
     }
 
-    // 01.06.2026 (крапки)
-    const dot = str.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
-    if (dot) {
-      return new Date(Number(dot[3]), Number(dot[2])-1, Number(dot[1]));
+    // Якщо рядок містить "план" або "факт" — точно пропускаємо
+    if (str.includes("план") || str.includes("факт") || str.includes(".")) {
+      return null;
     }
 
-    // Google Date()
-    const gviz = str.match(/^Date\((\d{4}),(\d{1,2}),(\d{1,2})\)$/);
-    if (gviz) {
-      return new Date(Number(gviz[1]), Number(gviz[2]), Number(gviz[3]));
-    }
+    return null;
   }
 
   return null;
 }
+
 function isDateInsideSheetMonth(date, sheetName) {
   // Захист від дублювання: якщо вкладка "07/2026" випадково містить дати червня,
   // ці рядки НЕ повинні рахуватися у червень.
@@ -324,10 +338,17 @@ function sumRows(rows) {
     acc.salesFact += row.salesFact;
     return acc;
   }, {
-    calls: 0, callsLong: 0, messagesNoCall: 0, newCrm: 0, nonTarget: 0,
-    salesPlan: 0, salesAgreed: 0, salesFact: 0
+    calls: 0,
+    callsLong: 0,
+    messagesNoCall: 0,
+    newCrm: 0,
+    nonTarget: 0,
+    salesPlan: 0,
+    salesAgreed: 0,
+    salesFact: 0
   });
 }
+
 // =====================================================
 // GOOGLE SHEETS FETCH
 // =====================================================
@@ -368,18 +389,16 @@ function normalizeRow(managerName, sheetName, googleRow) {
   const c = googleRow.c || [];
   const cols = CONFIG.columns;
 
-  const dateCell = c[cols.date];
-  const dateStr = String(dateCell?.v || dateCell?.f || "").trim();
+  const date = parseGoogleDate(c[cols.date]);
 
-  const date = parseGoogleDate(dateCell);
+  // Беремо тільки денні рядки з реальною датою.
+  // Рядки план/факт по тижнях автоматично пропускаються.
+  if (!date) return null;
 
-  // Фільтруємо тільки реальні денні рядки
-  const isDailyRow = date && 
-                     !dateStr.includes("план") && 
-                     !dateStr.includes("факт") &&
-                     !dateStr.includes("Задачи");
-
-  if (!isDailyRow) return null;
+  // Додатковий захист від дублювання між вкладками місяців.
+  // Наприклад, якщо вкладка "07/2026" була скопійована з червня і ще містить дати 01-06-2026,
+  // вона не потрапить у підрахунок за червень.
+  if (!isDateInsideSheetMonth(date, sheetName)) return null;
 
   return {
     manager: managerName,
@@ -397,8 +416,6 @@ function normalizeRow(managerName, sheetName, googleRow) {
     salesFact: numberValue(c[cols.salesFact])
   };
 }
-
-
 
 async function loadData() {
   setStatus("Завантаження даних...");
