@@ -126,7 +126,7 @@ function numberValue(cell) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function parseGoogleDate(cell) {
+function parseGoogleDate(cell, fullRowText = "") {
   if (!cell) return null;
 
   const value = cell.v ?? cell.f ?? cell;
@@ -136,44 +136,30 @@ function parseGoogleDate(cell) {
   if (typeof value === "string") {
     const str = value.trim();
 
-    // Google Visualization API: Date(2026,5,1)
+    // Google Date()
     const gviz = str.match(/^Date\((\d{4}),(\d{1,2}),(\d{1,2})\)$/);
     if (gviz) {
-      const year = Number(gviz[1]);
-      const month = Number(gviz[2]); // 0-based
-      const day = Number(gviz[3]);
-      return new Date(year, month, day);
+      return new Date(Number(gviz[1]), Number(gviz[2]), Number(gviz[3]));
     }
 
-    // Формат 01.06.2026 (крапки)
+    // 01.06.2026
     const dot = str.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
     if (dot) {
-      const day = Number(dot[1]);
-      const month = Number(dot[2]) - 1;
-      const year = Number(dot[3]);
-      return new Date(year, month, day);
+      return new Date(Number(dot[3]), Number(dot[2])-1, Number(dot[1]));
     }
 
-    // Формат 01-06-2026 (дефіс) — ТВОЙ ОСНОВНИЙ ФОРМАТ
+    // 01-06-2026 (твій основний формат)
     const dash = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
     if (dash) {
-      const day = Number(dash[1]);
-      const month = Number(dash[2]) - 1;
-      const year = Number(dash[3]);
-      return new Date(year, month, day);
+      return new Date(Number(dash[3]), Number(dash[2])-1, Number(dash[1]));
     }
 
-    // Якщо рядок містить "план" або "факт" — точно пропускаємо
-    if (str.includes("план") || str.includes("факт") || str.includes(".")) {
-      return null;
-    }
-
+    // Якщо це підсумковий рядок (план/факт) — повертаємо null для дати, але будемо обробляти окремо
     return null;
   }
 
   return null;
 }
-
 function isDateInsideSheetMonth(date, sheetName) {
   // Захист від дублювання: якщо вкладка "07/2026" випадково містить дати червня,
   // ці рядки НЕ повинні рахуватися у червень.
