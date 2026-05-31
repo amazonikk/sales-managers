@@ -130,21 +130,46 @@ function parseGoogleDate(cell) {
   if (!cell) return null;
 
   // ВАЖЛИВО:
-  // Google іноді може віддавати тижневі/місячні підсумкові рядки як дату в cell.v,
-  // хоча на екрані у cell.f написано щось типу "01-05.06.2026 факт".
-  // Тому спочатку перевіряємо саме видимий текст клітинки.
+  // Спочатку дивимося саме на видимий текст клітинки cell.f.
+  // Це не дає підсумковим рядкам типу "01-05.06.2026 факт" пройти як денна дата.
+  const hasFormattedValue = typeof cell === "object" && cell.f != null;
   const displayValue = String(cell.f ?? cell.v ?? cell).trim();
 
-  // Беремо ТІЛЬКИ денні рядки: 01.06.2026 або 01-06-2026.
-  // Рядки "01-05.06.2026 факт", "01-30.06.2026 факт", "план" автоматично відсікаються.
-  const dayMatch = displayValue.match(/^(\d{1,2})[.-](\d{1,2})[.-](\d{4})$/);
-  if (!dayMatch) return null;
+  // Беремо ТІЛЬКИ денні рядки: 01.06.2026, 01-06-2026 або 01/06/2026.
+  const dayMatch = displayValue.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})$/);
+  if (dayMatch) {
+    const day = Number(dayMatch[1]);
+    const month = Number(dayMatch[2]) - 1;
+    const year = Number(dayMatch[3]);
+    return new Date(year, month, day);
+  }
 
-  const day = Number(dayMatch[1]);
-  const month = Number(dayMatch[2]) - 1;
-  const year = Number(dayMatch[3]);
+  // Якщо Google віддав дату тільки у raw-форматі Date(2026,5,1), теж приймаємо.
+  // Але тільки якщо немає cell.f, бо cell.f може містити підсумковий текст "01-05.06.2026 факт".
+  if (!hasFormattedValue) {
+    const rawValue = String(cell.v ?? cell).trim();
+    const gviz = rawValue.match(/^Date\((\d{4}),(\d{1,2}),(\d{1,2})\)$/);
+    if (gviz) {
+      const year = Number(gviz[1]);
+      const month = Number(gviz[2]); // 0-based
+      const day = Number(gviz[3]);
+      return new Date(year, month, day);
+    }
+  }
 
-  return new Date(year, month, day);
+  return null;
+}
+
+function isDateInsideSheetMonth(date, sheetName) {
+  // Захист від дублювання: якщо вкладка "07/2026" випадково містить дати червня,
+  // ці рядки НЕ повинні рахуватися у червень.
+  const match = String(sheetName).match(/^(\d{1,2})\/(\d{4})$/);
+  if (!match) return true;
+
+  const sheetMonth = Number(match[1]);
+  const sheetYear = Number(match[2]);
+
+  return date.getFullYear() === sheetYear && date.getMonth() + 1 === sheetMonth;
 }
 
 function toISODate(date) {
@@ -355,6 +380,11 @@ function normalizeRow(managerName, sheetName, googleRow) {
   // Беремо тільки денні рядки з реальною датою.
   // Рядки план/факт по тижнях автоматично пропускаються.
   if (!date) return null;
+
+  // Додатковий захист від дублювання між вкладками місяців.
+  // Наприклад, якщо вкладка "07/2026" була скопійована з червня і ще містить дати 01-06-2026,
+  // вона не потрапить у підрахунок за червень.
+  if (!isDateInsideSheetMonth(date, sheetName)) return null;
 
   return {
     manager: managerName,
