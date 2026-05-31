@@ -126,7 +126,7 @@ function numberValue(cell) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function parseGoogleDate(cell, fullRowText = "") {
+function parseGoogleDate(cell) {
   if (!cell) return null;
 
   const value = cell.v ?? cell.f ?? cell;
@@ -136,26 +136,26 @@ function parseGoogleDate(cell, fullRowText = "") {
   if (typeof value === "string") {
     const str = value.trim();
 
-    // Google Date()
-    const gviz = str.match(/^Date\((\d{4}),(\d{1,2}),(\d{1,2})\)$/);
-    if (gviz) {
-      return new Date(Number(gviz[1]), Number(gviz[2]), Number(gviz[3]));
+    // 01-06-2026 (дефіс)
+    const dash = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    if (dash) {
+      const day = Number(dash[1]);
+      const month = Number(dash[2]) - 1;
+      const year = Number(dash[3]);
+      return new Date(year, month, day);
     }
 
-    // 01.06.2026
+    // 01.06.2026 (крапки)
     const dot = str.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
     if (dot) {
       return new Date(Number(dot[3]), Number(dot[2])-1, Number(dot[1]));
     }
 
-    // 01-06-2026 (твій основний формат)
-    const dash = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-    if (dash) {
-      return new Date(Number(dash[3]), Number(dash[2])-1, Number(dash[1]));
+    // Google Date()
+    const gviz = str.match(/^Date\((\d{4}),(\d{1,2}),(\d{1,2})\)$/);
+    if (gviz) {
+      return new Date(Number(gviz[1]), Number(gviz[2]), Number(gviz[3]));
     }
-
-    // Якщо це підсумковий рядок (план/факт) — повертаємо null для дати, але будемо обробляти окремо
-    return null;
   }
 
   return null;
@@ -373,20 +373,19 @@ function normalizeRow(managerName, sheetName, googleRow) {
 
   const date = parseGoogleDate(dateCell);
 
-  const isPlanRow = dateStr.includes("план");
-  const isFactRow = dateStr.includes("факт");
+  // Фільтруємо тільки реальні денні рядки
+  const isDailyRow = date && 
+                     !dateStr.includes("план") && 
+                     !dateStr.includes("факт") &&
+                     !dateStr.includes("Задачи");
 
-  // Якщо це не дата і не план/факт рядок — пропускаємо
-  if (!date && !isPlanRow && !isFactRow) return null;
+  if (!isDailyRow) return null;
 
-  const row = {
+  return {
     manager: managerName,
     sheet: sheetName,
-    date: date || null,
-    dateISO: date ? toISODate(date) : null,
-    isPlanRow,
-    isFactRow,
-    periodLabel: dateStr, // наприклад "01-05.06.2026 факт"
+    date,
+    dateISO: toISODate(date),
 
     calls: numberValue(c[cols.calls]),
     callsLong: numberValue(c[cols.callsLong]),
@@ -397,9 +396,9 @@ function normalizeRow(managerName, sheetName, googleRow) {
     salesAgreed: numberValue(c[cols.salesAgreed]),
     salesFact: numberValue(c[cols.salesFact])
   };
-
-  return row;
 }
+
+
 
 async function loadData() {
   setStatus("Завантаження даних...");
