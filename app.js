@@ -129,32 +129,46 @@ function numberValue(cell) {
 function parseGoogleDate(cell) {
   if (!cell) return null;
 
-  // ВАЖЛИВО:
-  // Спочатку дивимося саме на видимий текст клітинки cell.f.
-  // Це не дає підсумковим рядкам типу "01-05.06.2026 факт" пройти як денна дата.
-  const hasFormattedValue = typeof cell === "object" && cell.f != null;
-  const displayValue = String(cell.f ?? cell.v ?? cell).trim();
+  const value = cell.v ?? cell.f ?? cell;
 
-  // Беремо ТІЛЬКИ денні рядки: 01.06.2026, 01-06-2026 або 01/06/2026.
-  const dayMatch = displayValue.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})$/);
-  if (dayMatch) {
-    const day = Number(dayMatch[1]);
-    const month = Number(dayMatch[2]) - 1;
-    const year = Number(dayMatch[3]);
-    return new Date(year, month, day);
-  }
+  if (value instanceof Date) return value;
 
-  // Якщо Google віддав дату тільки у raw-форматі Date(2026,5,1), теж приймаємо.
-  // Але тільки якщо немає cell.f, бо cell.f може містити підсумковий текст "01-05.06.2026 факт".
-  if (!hasFormattedValue) {
-    const rawValue = String(cell.v ?? cell).trim();
-    const gviz = rawValue.match(/^Date\((\d{4}),(\d{1,2}),(\d{1,2})\)$/);
+  if (typeof value === "string") {
+    const str = value.trim();
+
+    // Google Visualization API: Date(2026,5,1)
+    const gviz = str.match(/^Date\((\d{4}),(\d{1,2}),(\d{1,2})\)$/);
     if (gviz) {
       const year = Number(gviz[1]);
       const month = Number(gviz[2]); // 0-based
       const day = Number(gviz[3]);
       return new Date(year, month, day);
     }
+
+    // Формат 01.06.2026 (крапки)
+    const dot = str.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+    if (dot) {
+      const day = Number(dot[1]);
+      const month = Number(dot[2]) - 1;
+      const year = Number(dot[3]);
+      return new Date(year, month, day);
+    }
+
+    // Формат 01-06-2026 (дефіс) — ТВОЙ ОСНОВНИЙ ФОРМАТ
+    const dash = str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    if (dash) {
+      const day = Number(dash[1]);
+      const month = Number(dash[2]) - 1;
+      const year = Number(dash[3]);
+      return new Date(year, month, day);
+    }
+
+    // Якщо рядок містить "план" або "факт" — точно пропускаємо
+    if (str.includes("план") || str.includes("факт") || str.includes(".")) {
+      return null;
+    }
+
+    return null;
   }
 
   return null;
