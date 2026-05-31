@@ -324,17 +324,10 @@ function sumRows(rows) {
     acc.salesFact += row.salesFact;
     return acc;
   }, {
-    calls: 0,
-    callsLong: 0,
-    messagesNoCall: 0,
-    newCrm: 0,
-    nonTarget: 0,
-    salesPlan: 0,
-    salesAgreed: 0,
-    salesFact: 0
+    calls: 0, callsLong: 0, messagesNoCall: 0, newCrm: 0, nonTarget: 0,
+    salesPlan: 0, salesAgreed: 0, salesFact: 0
   });
 }
-
 // =====================================================
 // GOOGLE SHEETS FETCH
 // =====================================================
@@ -375,22 +368,25 @@ function normalizeRow(managerName, sheetName, googleRow) {
   const c = googleRow.c || [];
   const cols = CONFIG.columns;
 
-  const date = parseGoogleDate(c[cols.date]);
+  const dateCell = c[cols.date];
+  const dateStr = String(dateCell?.v || dateCell?.f || "").trim();
 
-  // Беремо тільки денні рядки з реальною датою.
-  // Рядки план/факт по тижнях автоматично пропускаються.
-  if (!date) return null;
+  const date = parseGoogleDate(dateCell);
 
-  // Додатковий захист від дублювання між вкладками місяців.
-  // Наприклад, якщо вкладка "07/2026" була скопійована з червня і ще містить дати 01-06-2026,
-  // вона не потрапить у підрахунок за червень.
-  if (!isDateInsideSheetMonth(date, sheetName)) return null;
+  const isPlanRow = dateStr.includes("план");
+  const isFactRow = dateStr.includes("факт");
 
-  return {
+  // Якщо це не дата і не план/факт рядок — пропускаємо
+  if (!date && !isPlanRow && !isFactRow) return null;
+
+  const row = {
     manager: managerName,
     sheet: sheetName,
-    date,
-    dateISO: toISODate(date),
+    date: date || null,
+    dateISO: date ? toISODate(date) : null,
+    isPlanRow,
+    isFactRow,
+    periodLabel: dateStr, // наприклад "01-05.06.2026 факт"
 
     calls: numberValue(c[cols.calls]),
     callsLong: numberValue(c[cols.callsLong]),
@@ -401,6 +397,8 @@ function normalizeRow(managerName, sheetName, googleRow) {
     salesAgreed: numberValue(c[cols.salesAgreed]),
     salesFact: numberValue(c[cols.salesFact])
   };
+
+  return row;
 }
 
 async function loadData() {
